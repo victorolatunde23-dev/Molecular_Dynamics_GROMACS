@@ -1,0 +1,9 @@
+# simulation output (large; lives on Google Drive)
+md_results/
+*.xtc
+*.trr
+*.cpt
+*.edr
+\#*\#
+__pycache__/
+.ipynb_checkpoints/
