@@ -732,6 +732,22 @@ def xvg_to_outputs(xvg: Path, csv_dir: Path, png_dir: Path):
             "mean_second_half": float(half.mean()), "std_second_half": float(half.std())}
 
 
+def cluster_complex(R: Runner, tpr, traj, ndx, out, groups: list, step: str):
+    """Remove periodic-boundary artefacts so protein chains and ligand stay together.
+    1) make every molecule whole; 2) put all molecules of the Complex group (protein chains,
+    or chain pieces split at gaps, plus the ligand) in the same periodic image and centre it.
+    `-pbc mol` is NOT enough: it images each molecule separately, so a multi-chain protein or a
+    ligand can end up a box length away from the rest (huge RMSD, wrong MM/GBSA)."""
+    whole = Path(str(out) + ".whole.xtc")
+    cpx, sysg = groups.index("Complex"), groups.index("System")
+    R.gmx(["trjconv", "-s", tpr, "-f", traj, "-n", ndx, "-o", whole, "-pbc", "whole"], step,
+          stdin=f"{sysg}\n")
+    # same group for clustering and centring, then the output group
+    R.gmx(["trjconv", "-s", tpr, "-f", whole, "-n", ndx, "-o", out, "-pbc", "cluster", "-center"], step,
+          stdin=f"{cpx}\n{cpx}\n{sysg}\n")
+    whole.unlink(missing_ok=True)
+
+
 def analyse(cfg: Config, P: Paths, R: Runner) -> dict:
     banner("Analysis")
     xd, cd, pd = P.ana / "xvg", P.ana / "csv", P.ana / "plots"
@@ -744,14 +760,16 @@ def analyse(cfg: Config, P: Paths, R: Runner) -> dict:
     lig = cfg.has_ligand
     fit = P.ana / "md_fit.xtc"
 
-    if not done(fit, cfg):
+    marker = P.ana / "md_fit.pbc_cluster"        # fits made before the PBC fix are redone once
+    if cfg.overwrite or not fit.exists() or not marker.exists():
         center = P.ana / "md_center.xtc"
-        R.gmx(["trjconv", "-s", tpr, "-f", xtc, "-n", ndx, "-o", center, "-center",
-               "-pbc", "mol", "-ur", "compact"], "08_trjconv",
-              stdin=f"{g('Complex')}\n{g('System')}\n")
+        cluster_complex(R, tpr, xtc, ndx, center, groups, "08_trjconv")
         R.gmx(["trjconv", "-s", tpr, "-f", center, "-n", ndx, "-o", fit, "-fit", "rot+trans"],
               "08_trjconv", stdin=f"{g('Backbone')}\n{g('System')}\n")
         center.unlink(missing_ok=True)
+        marker.write_text("PBC treated with -pbc whole + -pbc cluster on Complex\n")
+    else:
+        print("    already done (md_fit.xtc) - skipping")
 
     common = ["-s", tpr, "-f", fit, "-n", ndx]
 
