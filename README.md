@@ -14,7 +14,9 @@ A learning path in molecular dynamics, from a first protein–ligand simulation 
 | 5a | `L5a_umbrella_sampling.ipynb` | Umbrella sampling from a Level 4 pull, potential of mean force with WHAM and bootstrap errors | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/victorolatunde23-dev/Molecular_Dynamics_GROMACS/blob/main/notebooks/L5a_umbrella_sampling.ipynb) |
 | 5b | `L5b_metadynamics_plumed.ipynb` | Well-tempered metadynamics with PLUMED: alanine dipeptide φ/ψ free-energy surface; optional benzene unbinding | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/victorolatunde23-dev/Molecular_Dynamics_GROMACS/blob/main/notebooks/L5b_metadynamics_plumed.ipynb) |
 
-**Order:** run Level 1 first; Levels 2–5 reuse its system. Level 5a needs Level 4 finished.
+| Tool | `IFD_MMGBSA_GROMACS.ipynb` | MM/GBSA in GROMACS (gmx_MMPBSA) for Schrödinger Induced Fit Docking poses: quick (minimised structure) and MD modes, ranked against IFD/Glide scores | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/victorolatunde23-dev/Molecular_Dynamics_GROMACS/blob/main/notebooks/IFD_MMGBSA_GROMACS.ipynb) |
+
+**Order:** run Level 1 first; Levels 2–5 reuse its system. Level 5a needs Level 4 finished. The IFD MM/GBSA notebook is independent of the levels.
 
 ## How to run
 
@@ -31,7 +33,8 @@ Each notebook is self-contained: it writes the pipeline modules from `src/` to t
 notebooks/   Colab notebooks, one per level
 src/         md_pipeline.py  - base pipeline (build, equilibrate, produce, analyse, visualise)
              md_advanced.py  - Levels 2-5 (replicas, MM/GBSA, alchemical FE, SMD, umbrella, metadynamics)
-tests/       test_offline.py - tests for everything that does not need GROMACS
+             ifd_mmgbsa.py   - MM/GBSA for Induced Fit Docking poses (reads .maegz with RDKit)
+tests/       test_offline.py, test_ifd_mmgbsa.py - tests for everything that does not need GROMACS
 ```
 
 `src/md_pipeline.py` also works as a command-line script on a machine with GROMACS installed:
