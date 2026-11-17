@@ -109,4 +109,18 @@ print(df.to_string())
 assert list(df["pose"]) == ["pose02_a", "pose01_a", "pose03_a"] and df["rank"].tolist() == [1, 2, 3]
 im.plot_vs_scores(df, tmp / "p.png"); assert (tmp / "p.png").exists()
 print("PASS summary table + plot")
+# PBC fix: the commands sent to GROMACS
+class FakeR:
+    def __init__(self): self.calls = []
+    def gmx(self, args, step, stdin=None, **kw): self.calls.append(([str(a) for a in args], stdin))
+groups = ["System", "Protein", "Protein-H", "C-alpha", "Backbone", "LIG", "Complex"]
+fr = FakeR()
+mp.cluster_complex(fr, "md.tpr", "md.xtc", "index.ndx", tmp / "c.xtc", groups, "t")
+(a1, s1), (a2, s2) = fr.calls
+assert a1[:1] == ["trjconv"] and a1[a1.index("-pbc") + 1] == "whole" and s1 == "0\n"
+assert a2[a2.index("-pbc") + 1] == "cluster" and "-center" in a2 and "mol" not in a2
+assert a2[a2.index("-f") + 1] == a1[a1.index("-o") + 1], "cluster step reads the whole-molecule output"
+assert s2 == "6\n6\n0\n", s2          # cluster Complex, centre Complex, output System
+assert im.RESULT_TAG == "_v2"
+print("PASS PBC clustering commands")
 print("\nALL TESTS PASSED")

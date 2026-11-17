@@ -312,6 +312,9 @@ def prepare_receptor(cfg: Config) -> dict:
     return rep
 
 
+RESULT_TAG = "_v2"     # v2: complex kept in one periodic image; earlier results are not reused
+
+
 def gmx_mmpbsa(cfg: Config, R: Runner, workdir: Path, tpr: Path, xtc: Path, ndx: Path,
                interval: int = 1, start: int = 1, end: int = 9999999, igb: int = 5,
                decomp: bool = False) -> dict:
@@ -361,17 +364,15 @@ def run_pose(cfg: Config, mode: str = "md", interval: int = 5, decomp: bool = Fa
         tpr = P.em / "em.tpr"
         groups = mp.make_index(cfg, P, R, tpr)
         ndx = P.ana / "index.ndx"
-        whole = P.em / "em_whole.xtc"
+        whole = P.em / "em_cluster.xtc"
         if not whole.exists() or cfg.overwrite:
-            R.gmx(["trjconv", "-s", tpr, "-f", P.em / "em.gro", "-n", ndx, "-o", whole, "-pbc", "mol",
-                   "-center"], "mmgbsa_quick_pbc",
-                  stdin=f"{groups.index('Complex')}\n{groups.index('System')}\n")
-        res = gmx_mmpbsa(cfg, R, P.root / "mmgbsa_quick", tpr, whole, ndx, 1, 1, 1, igb, decomp)
+            mp.cluster_complex(R, tpr, P.em / "em.gro", ndx, whole, groups, "mmgbsa_quick_pbc")
+        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_quick{RESULT_TAG}", tpr, whole, ndx, 1, 1, 1, igb, decomp)
     else:
         result = mp.run_pipeline(cfg)              # build, equilibrate, MD, analysis, viewer files
         P = Paths(cfg)
         R = Runner(cfg, P)
-        res = gmx_mmpbsa(cfg, R, P.root / "mmgbsa_md", P.md / "md.tpr", P.ana / "md_fit.xtc",
+        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_md{RESULT_TAG}", P.md / "md.tpr", P.ana / "md_fit.xtc",
                          P.ana / "index.ndx", interval, 1, 9999999, igb, decomp)
         s = result["summary"]
         for k in ("rmsd_ligand", "rmsd_backbone", "contacts_protein_ligand"):
@@ -384,7 +385,7 @@ def run_pose(cfg: Config, mode: str = "md", interval: int = 5, decomp: bool = Fa
     if "decomp" in res:
         top = sorted(res["decomp"], key=lambda r: r["total"])[:5]
         out["top_residues"] = ", ".join(f"{r['residue']} {r['total']:.1f}" for r in top)
-    (Paths(cfg).root / f"pose_result_{mode}.json").write_text(json.dumps(out, indent=2))
+    (Paths(cfg).root / f"pose_result_{mode}{RESULT_TAG}.json").write_text(json.dumps(out, indent=2))
     print(f"    dG(bind, GB) = {out['dG_bind_kcal']} ± {out['dG_sd_kcal']} kcal/mol   "
           f"({out['minutes']} min)")
     return out
@@ -413,7 +414,7 @@ def run_all(base: Config, project: str, poses: list[dict], mode: str = "md", int
     root.mkdir(parents=True, exist_ok=True)
     for i, pose in enumerate(poses):
         cfg = pose_config(base, project, pose)
-        done_file = Paths(cfg).root / f"pose_result_{mode}.json"
+        done_file = Paths(cfg).root / f"pose_result_{mode}{RESULT_TAG}.json"
         if done_file.exists() and not base.overwrite:
             r = json.loads(done_file.read_text())
             print(f"{pose['pose']}: already done - dG {r.get('dG_bind_kcal')} kcal/mol")
