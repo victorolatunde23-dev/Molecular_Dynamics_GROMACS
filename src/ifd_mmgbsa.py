@@ -312,7 +312,8 @@ def prepare_receptor(cfg: Config) -> dict:
     return rep
 
 
-RESULT_TAG = "_v2"     # v2: complex kept in one periodic image; earlier results are not reused
+MMGBSA_TAG = "_v2"     # MM/GBSA folders: v2 = complex kept in one periodic image
+RESULT_TAG = "_v3"     # pose summaries: v3 = RMSD against a clustered reference (MM/GBSA reused)
 
 
 def gmx_mmpbsa(cfg: Config, R: Runner, workdir: Path, tpr: Path, xtc: Path, ndx: Path,
@@ -367,12 +368,12 @@ def run_pose(cfg: Config, mode: str = "md", interval: int = 5, decomp: bool = Fa
         whole = P.em / "em_cluster.xtc"
         if not whole.exists() or cfg.overwrite:
             mp.cluster_complex(R, tpr, P.em / "em.gro", ndx, whole, groups, "mmgbsa_quick_pbc")
-        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_quick{RESULT_TAG}", tpr, whole, ndx, 1, 1, 1, igb, decomp)
+        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_quick{MMGBSA_TAG}", tpr, whole, ndx, 1, 1, 1, igb, decomp)
     else:
         result = mp.run_pipeline(cfg)              # build, equilibrate, MD, analysis, viewer files
         P = Paths(cfg)
         R = Runner(cfg, P)
-        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_md{RESULT_TAG}", P.md / "md.tpr", P.ana / "md_fit.xtc",
+        res = gmx_mmpbsa(cfg, R, P.root / f"mmgbsa_md{MMGBSA_TAG}", P.md / "md.tpr", P.ana / "md_fit.xtc",
                          P.ana / "index.ndx", interval, 1, 9999999, igb, decomp)
         s = result["summary"]
         for k in ("rmsd_ligand", "rmsd_backbone", "contacts_protein_ligand"):

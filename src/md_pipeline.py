@@ -760,18 +760,28 @@ def analyse(cfg: Config, P: Paths, R: Runner) -> dict:
     lig = cfg.has_ligand
     fit = P.ana / "md_fit.xtc"
 
-    marker = P.ana / "md_fit.pbc_cluster"        # fits made before the PBC fix are redone once
-    if cfg.overwrite or not fit.exists() or not marker.exists():
+    # Reference structure for fitting and RMSD: the FIRST CLUSTERED FRAME, not md.tpr.
+    # md.tpr holds the start coordinates as GROMACS stored them, where chains / chain pieces and
+    # the ligand can sit in different periodic images; fitting to that gives a huge constant RMSD.
+    ref_tpr = P.ana / "md_ref.tpr"
+    marker = P.ana / "md_fit.ref_v2"             # fits made before this fix are redone once
+    if cfg.overwrite or not fit.exists() or not ref_tpr.exists() or not marker.exists():
         center = P.ana / "md_center.xtc"
         cluster_complex(R, tpr, xtc, ndx, center, groups, "08_trjconv")
-        R.gmx(["trjconv", "-s", tpr, "-f", center, "-n", ndx, "-o", fit, "-fit", "rot+trans"],
+        ref_gro = P.ana / "md_ref.gro"
+        R.gmx(["trjconv", "-s", tpr, "-f", center, "-o", ref_gro, "-dump", 0], "08_trjconv",
+              stdin=f"{g('System')}\n")
+        R.gmx(["grompp", "-f", P.md / "md.mdp", "-c", ref_gro, "-p", "topol.top", "-o", ref_tpr,
+               "-po", P.ana / "md_ref_out.mdp", "-maxwarn", max(cfg.maxwarn, 1)], "08_trjconv", cwd=P.sys)
+        R.gmx(["trjconv", "-s", ref_tpr, "-f", center, "-n", ndx, "-o", fit, "-fit", "rot+trans"],
               "08_trjconv", stdin=f"{g('Backbone')}\n{g('System')}\n")
         center.unlink(missing_ok=True)
-        marker.write_text("PBC treated with -pbc whole + -pbc cluster on Complex\n")
+        (P.ana / "md_fit.pbc_cluster").unlink(missing_ok=True)
+        marker.write_text("PBC: -pbc whole + -pbc cluster on Complex; reference = first clustered frame\n")
     else:
         print("    already done (md_fit.xtc) - skipping")
 
-    common = ["-s", tpr, "-f", fit, "-n", ndx]
+    common = ["-s", ref_tpr, "-f", fit, "-n", ndx]
 
     def gmx_try(step, *variants):
         for args, stdin in variants:
