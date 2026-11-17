@@ -121,6 +121,29 @@ assert a1[:1] == ["trjconv"] and a1[a1.index("-pbc") + 1] == "whole" and s1 == "
 assert a2[a2.index("-pbc") + 1] == "cluster" and "-center" in a2 and "mol" not in a2
 assert a2[a2.index("-f") + 1] == a1[a1.index("-o") + 1], "cluster step reads the whole-molecule output"
 assert s2 == "6\n6\n0\n", s2          # cluster Complex, centre Complex, output System
-assert im.RESULT_TAG == "_v2"
+assert im.RESULT_TAG == "_v3" and im.MMGBSA_TAG == "_v2"
 print("PASS PBC clustering commands")
+# analyse(): fit and RMSD use the clustered first-frame reference, not md.tpr
+class FakeR2(FakeR):
+    def gmx(self, args, step, stdin=None, check=True, cwd=None, **kw):
+        self.calls.append(([str(a) for a in args], stdin, str(cwd) if cwd else None)); return 0
+acfg = mp.Config(name="ana", output_root=str(tmp / "res"))
+AP = mp.Paths(acfg); AP.make()
+orig_make_index = mp.make_index
+mp.make_index = lambda cfg, P, R, tpr: groups
+try:
+    fr2 = FakeR2(); mp.analyse(acfg, AP, fr2)
+finally:
+    mp.make_index = orig_make_index
+cmds = [c[0] for c in fr2.calls]
+ref = str(AP.ana / "md_ref.tpr")
+i_gpp = next(i for i, c in enumerate(cmds) if c[0] == "grompp")
+assert cmds[i_gpp][cmds[i_gpp].index("-o") + 1] == ref and fr2.calls[i_gpp][2] == str(AP.sys)
+fit = next(c for c in cmds if "-fit" in c)
+assert fit[fit.index("-s") + 1] == ref, "fit must use the clustered reference"
+for c in cmds:
+    if c[0] in ("rms", "rmsf", "gyrate", "mindist", "hbond"):
+        assert c[c.index("-s") + 1] == ref, c
+assert (AP.ana / "md_fit.ref_v2").exists()
+print("PASS analysis uses clustered reference")
 print("\nALL TESTS PASSED")
